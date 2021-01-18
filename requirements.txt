@@ -3,3 +3,4 @@ zope.interface
 certbot
 pytest
 flake8
+requests_mock

@@ -1,0 +1,26 @@
+name: test
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: set up Python 3.9
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+    - name: install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    - name: lint
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: test
+      run: |
+        pytest

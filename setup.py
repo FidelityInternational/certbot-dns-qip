@@ -1,3 +1,4 @@
+from os import path
 from setuptools import setup
 from setuptools import find_packages
 
@@ -11,9 +12,6 @@ install_requires = [
     "mock",
     "requests-mock",
 ]
-
-# read the contents of your README file
-from os import path
 
 this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md")) as f:

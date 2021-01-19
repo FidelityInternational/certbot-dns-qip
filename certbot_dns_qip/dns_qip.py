@@ -1,4 +1,4 @@
-"""DNS Authenticator for ISPConfig."""
+"""DNS Authenticator for VitalQIP."""
 import json
 import logging
 import time
@@ -11,7 +11,6 @@ from certbot import interfaces
 from certbot.plugins import dns_common
 
 logger = logging.getLogger(__name__)
-
 
 @zope.interface.implementer(interfaces.IAuthenticator)
 @zope.interface.provider(interfaces.IPluginFactory)
@@ -29,13 +28,11 @@ class Authenticator(dns_common.DNSAuthenticator):
         self.credentials = None
 
     @classmethod
-    def add_parser_arguments(cls, add):  # pylint: disable=arguments-differ
-        super(Authenticator, cls).add_parser_arguments(
-            add, default_propagation_seconds=120
-        )
+    def add_parser_arguments(cls, add):
+        super(Authenticator, cls).add_parser_arguments(add)
         add("credentials", help="VitalQIP credentials INI file.")
 
-    def more_info(self):  # pylint: disable=missing-docstring,no-self-use
+    def more_info(self):
         return (
             "This plugin configures a DNS TXT record to respond to a dns-01 challenge using "
             + "the VitalQIP Remote REST API."
@@ -44,7 +41,7 @@ class Authenticator(dns_common.DNSAuthenticator):
     def _setup_credentials(self):
         self.credentials = self._configure_credentials(
             "credentials",
-            "ISPConfig credentials INI file",
+            "QIP credentials INI file",
             {
                 "endpoint": "URL of the QIP Remote API.",
                 "username": "Username for QIP Remote API.",
@@ -69,7 +66,6 @@ class Authenticator(dns_common.DNSAuthenticator):
             self.credentials.conf("password"),
         )
 
-
 class _QIPClient(object):
     """
     Encapsulates all communication with the ISPConfig Remote REST API.
@@ -81,43 +77,38 @@ class _QIPClient(object):
         self.username = username
         self.password = password
         self.session = requests.Session()
-        self.session_id = None
+        # remove for prod release
+        self.session.verify = False
 
     def _login(self):
-        if self.session_id is not None:
+        if "Authentication" in self.session.headers.keys():
             return
         logger.debug("logging in")
         logindata = {"username": self.username, "password": self.password}
-        self.session_id = self._api_request("login", logindata)
-        logger.debug("session id is %s", self.session_id)
+        resp = self._api_request("login", logindata)
+        if "Authentication" not in resp.headers.keys():
+            raise errors.PluginError("HTTP Error during login. No 'Authentication' header found")
+        token = resp.headers["Authentication"]
+        logger.debug(f"session token is {token}")
+        self.session.headers.update({'Authentication': token})
 
     def _api_request(self, action, data):
-        if self.session_id is not None:
-            data["session_id"] = self.session_id
         url = self._get_url(action)
+        logger.debug(f"Data: {data}")
         resp = self.session.get(url, json=data)
-        logger.debug("API Request to URL: %s", url)
-        if resp.status_code != 200:
-            raise errors.PluginError(
-                "HTTP Error during login {0}".format(resp.status_code)
-            )
+        logger.debug(f"API Request to URL: {url}")
+        if 200 < resp.status_code > 201:
+            raise errors.PluginError(f"HTTP Error during request {resp.status_code}")
+        if action == "login":
+            return resp
         try:
             result = resp.json()
         except json.decoder.JSONDecodeError:
-            raise errors.PluginError(
-                "API response with non JSON: {0}".format(resp.text)
-            )
-        if result["code"] == "ok":
-            return result["response"]
-        elif result["code"] == "remote_fault":
-            raise errors.PluginError(
-                "API response with an error: {0}".format(result["message"])
-            )
-        else:
-            raise errors.PluginError("API response unknown {0}".format(resp.text))
-
+            raise errors.PluginError(f"API response with non JSON: {resp.text}")
+        return result
+        
     def _get_url(self, action):
-        return "{0}?{1}".format(self.endpoint, action)
+        return "{0}{1}".format(self.endpoint, action)
 
     def _get_server_id(self, zone_id):
         zone = self._api_request("dns_zone_get", {"primary_id": zone_id})

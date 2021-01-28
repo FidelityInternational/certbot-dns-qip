@@ -162,10 +162,14 @@ class _QIPClient(object):
         :raises certbot.errors.PluginError: if an error occurs communicating with the VitalQIP API
         """
         self._login()
-        logger.info(f"delete {record_name}")
-        zone = self._find_managed_zone(domain)
-        query = {"infraFQDN": zone, "infraType": "ZONE", "owner": record_name, "rrType": "TXT", "data1": record_content}
-        resp = self._api_request("DELETE", f"/api/v1/{self.organisation}/rr/singleDelete", query=query)
+        record = self.get_existing_txt(record_name)
+        if record is None:
+            return
+        if "rr" in record and record["rr"]["data"] == record_content:
+            logger.info(f"delete {record_name}")
+            zone = self._find_managed_zone(domain)
+            query = {"infraFQDN": zone, "infraType": "ZONE", "owner": record_name, "rrType": "TXT", "data1": record_content}
+            resp = self._api_request("DELETE", f"/api/v1/{self.organisation}/rr/singleDelete", query=query)
 
     def _insert_txt_record(self, record_name, record_content, record_ttl, domain):
         logger.debug(f"insert with data: {record_content}")
@@ -225,7 +229,7 @@ class _QIPClient(object):
         else:
             for zone in zones["list"]:
                 if zone["name"] == domain:
-                    logger.debug(f"found zone: {zone["name"]}")
+                    logger.debug(f"found zone: {zone['name']}")
                     return zone["name"]
 
     def get_existing_txt(self, record_name):

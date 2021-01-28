@@ -15,8 +15,8 @@ from certbot.tests import util as test_util
 FAKE_USER = "remoteuser"
 FAKE_PW = "password"
 FAKE_ENDPOINT = "http://endpoint"
-FAKE_ORG = "org"
-FAKE_TOKEN = "fake"
+FAKE_ORG = "fake-org"
+FAKE_TOKEN = "fake-token"
 
 class AuthenticatorTest(
     test_util.TempDirTestCase, dns_test_common.BaseAuthenticatorTest
@@ -86,20 +86,50 @@ class QIPClientTest(unittest.TestCase):
         self.adapter.register_uri(
             method,
             f"{FAKE_ENDPOINT}{action}",
-            text=json.dumps(response),
+            text=response,
             additional_matcher=additional_matcher,
             request_headers=request_headers,
             headers=response_headers,
             **kwargs
         )
 
-    def test_add_txt_record(self):
-        self._register_response("POST", "/api/login", response_headers={"Authentication": "asfnbajfdjbv"})
-        self._register_response("GET", f"/api/v1/FIL/rr.json?name={self.record_name}&getDefaultRRs=true", request_headers={"Authentication": "asfnbajfdjbv"})
-        self.client.add_txt_record(
-            DOMAIN, self.record_name, self.record_content, self.record_ttl
-        )
+    # def test_add_txt_record(self):
+    #     self._register_response("POST", "/api/login", response_headers={"Authentication": "asfnbajfdjbv"})
+    #     self._register_response("GET", f"/api/v1/{FAKE_ORG}/rr.json?name={self.record_name}&getDefaultRRs=true", request_headers={"Authentication": "asfnbajfdjbv"})
+    #     self.client.add_txt_record(
+    #         DOMAIN, self.record_name, self.record_content, self.record_ttl
+    #     )
 
+    def test_del_txt_record(self):
+        self._register_response("POST", "/api/login", response_headers={"Authentication": FAKE_TOKEN})
+        search_txt_response = {
+            "list": [{
+                        "name": DOMAIN,
+                        "type": "DOMAIN",
+                        "rr": {
+                            "name": self.record_name,
+                            "recordType": "TXT",
+                            "data": self.record_content,
+                        }
+            }]
+        }
+        self._register_response("GET", f"/api/v1/{FAKE_ORG}/qip-search.json?name={self.record_name}&searchType=All&subRange=TXT", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_txt_response)
+        search_zone_response = {
+            "list": [
+            {
+                "name": DOMAIN,
+                "defaultTtl": 3600,
+                "email": "hostmaster@foo.bar",
+                "expireTime": 604800,
+                "negativeCacheTtl": 600,
+                "refreshTime": 21600,
+                "retryTime": 3600
+            }]
+        }
+        self._register_response("GET", f"/api/v1/{FAKE_ORG}/zone.json?name={DOMAIN}", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_zone_response)
+        self._register_response("DELETE", f"/api/v1/{FAKE_ORG}/rr/singleDelete?infraFQDN={DOMAIN}&infraType=ZONE&owner={self.record_name}", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, status_code=204)
+        self.client.del_txt_record(DOMAIN, self.record_name, self.record_content, self.record_ttl)
+        assert(self.adapter.call_count) == 4
 
 if __name__ == "__main__":
     unittest.main()  # pragma: no cover

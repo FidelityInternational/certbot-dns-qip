@@ -45,9 +45,10 @@ class Authenticator(dns_common.DNSAuthenticator):
             "credentials",
             "QIP credentials INI file",
             {
-                "endpoint": "URL of the QIP Remote API.",
-                "username": "Username for QIP Remote API.",
-                "password": "Password for QIP Remote API.",
+                "endpoint": "URL of the QIP remote API.",
+                "username": "Username for QIP remote API.",
+                "password": "Password for QIP remote API.",
+                "organsation": "Organisation for QIP remote API",
             },
         )
 
@@ -71,7 +72,7 @@ class Authenticator(dns_common.DNSAuthenticator):
 
 class _QIPClient(object):
     """
-    Encapsulates all communication with the ISPConfig Remote REST API.
+    Encapsulates all communication with the QIP remote REST API.
     """
 
     def __init__(self, endpoint, username, password, organsation):
@@ -106,9 +107,9 @@ class _QIPClient(object):
         # logger.debug(f"Data: {data}")
         resp = self.session.request(method, url, json=data, params=query)
         logger.debug(f"API Request to URL: {url}")
-        if action == "api/v1/FIL/zone.json" and resp.status_code == 404:
+        if action == "/api/v1/FIL/zone.json" and resp.status_code == 404:
             return resp.text
-        if resp.status_code < 200 or resp.status_code > 201:
+        if resp.status_code < 200 or resp.status_code > 299:
             raise errors.PluginError(f"HTTP Error during request {resp.status_code}")
         if action == "/api/login":
             return resp
@@ -139,9 +140,6 @@ class _QIPClient(object):
         """
         self._login()
         record = self.get_existing_txt(record_name)
-        print('zzzzzzzzzzzzzz')
-        print(record)
-        print(record_content)
         if record is not None:
             if record["data1"] == record_content:
                 logger.info(f"already there, id {record['owner']}")
@@ -153,8 +151,6 @@ class _QIPClient(object):
             logger.info("insert new txt record")
             self._insert_txt_record(record_name, record_content, record_ttl, domain)
 
-        sys.exit(0)
-
     def del_txt_record(self, domain, record_name, record_content, record_ttl):
         """
         Delete a TXT record using the supplied information.
@@ -165,30 +161,16 @@ class _QIPClient(object):
         :param int record_ttl: The record TTL (number of seconds that the record may be cached).
         :raises certbot.errors.PluginError: if an error occurs communicating with the VitalQIP API
         """
-        return
-        # self._login()
-        # zone_id, zone_name = self._find_managed_zone(domain)
-        # if zone_id is None:
-        #     raise errors.PluginError("Domain not known")
-        # logger.debug("domain found: %s with id: %s", zone_name, zone_id)
-        # o_record_name = record_name
-        # record_name = record_name.replace(zone_name, "")[:-1]
-        # logger.debug(
-        #     "using record_name: %s from original: %s", record_name, o_record_name
-        # )
-        # record = self.get_existing_txt(record_name)
-        # if record is not None:
-        #     if record["data"] == record_content:
-        #         logger.debug("delete TXT record: %s", record["id"])
-        #         self._delete_txt_record(record["id"])
+        self._login()
+        zone = self._find_managed_zone(domain)
+        query = {"infraFQDN": zone, "infraType": "ZONE", "owner": record_name }
+        resp = self._api_request("DELETE", "/api/v1/FIL/rr/singleDelete", query=query)
 
     def _prepare_rr_data(self, old_record, record_content, record_ttl):
         updated_record = old_record.copy()
         updated_record["data1"] = record_content
         updated_record["ttl"] = record_ttl
-
         update_body = {'oldRRRec': old_record, 'updatedRRRec': updated_record}
-
         return update_body
 
     def _insert_txt_record(self, record_name, record_content, record_ttl, domain):
@@ -196,19 +178,13 @@ class _QIPClient(object):
         zone_name = self._find_managed_zone(domain)
         payload = {"owner": record_name, "classType": "IN", "rrType": "TXT", "data1": record_content, "publishing": "ALWAYS", "ttl": record_ttl, "infraType": "ZONE", "infraFQDN": zone_name}
         self._login()
-        self._api_request("POST", "api/v1/FIL/rr", data=payload)
+        self._api_request("POST", "/api/v1/FIL/rr", data=payload)
 
     def _update_txt_record(self, old_record, record_content, record_ttl):
         data = self._prepare_rr_data(old_record, record_content, record_ttl)
         logger.debug("update with data: {data}")
         self._login()
-        self._api_request("PUT", "api/v1/FIL/rr", data)
-
-    def _delete_txt_record(self, primary_id):
-        return
-        # # data = {"primary_id": primary_id}
-        # logger.debug("delete with data: %s", data)
-        # self._api_request("dns_txt_delete", data)
+        self._api_request("PUT", "/api/v1/FIL/rr", data)
 
     def _find_managed_zone(self, domain):
         """
@@ -222,7 +198,7 @@ class _QIPClient(object):
         if len(domain.split('.')) == 1:
             raise errors.PluginError(f"No zone found")
         self._login()
-        zones = self._api_request("GET", "api/v1/FIL/zone.json", query={"name": domain})
+        zones = self._api_request("GET", "/api/v1/FIL/zone.json", query={"name": domain})
         if "DNS Zone not found" in zones:
             domain = '.'.join(domain.split('.')[1:])
             return self._find_managed_zone(domain)
@@ -246,7 +222,7 @@ class _QIPClient(object):
         self._login()
         query = {"name": record_name, "getDefaultRRs": "true"}
         try:
-            records = self._api_request("GET", "api/v1/FIL/rr.json", query=query)
+            records = self._api_request("GET", "/api/v1/FIL/rr.json", query=query)
         except:
             return None
         for record in records['list']:

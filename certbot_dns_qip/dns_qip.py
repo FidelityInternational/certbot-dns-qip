@@ -48,7 +48,7 @@ class Authenticator(dns_common.DNSAuthenticator):
                 "endpoint": "URL of the QIP remote API.",
                 "username": "Username for QIP remote API.",
                 "password": "Password for QIP remote API.",
-                "organsation": "Organisation for QIP remote API",
+                "organisation": "Organisation for QIP remote API",
             },
         )
 
@@ -67,7 +67,7 @@ class Authenticator(dns_common.DNSAuthenticator):
             self.credentials.conf("endpoint"),
             self.credentials.conf("username"),
             self.credentials.conf("password"),
-            self.credentials.conf("organsation"),
+            self.credentials.conf("organisation"),
         )
 
 class _QIPClient(object):
@@ -75,7 +75,7 @@ class _QIPClient(object):
     Encapsulates all communication with the QIP remote REST API.
     """
 
-    def __init__(self, endpoint, username, password, organsation):
+    def __init__(self, endpoint, username, password, organisation):
         logger.debug("creating qipclient")
         e = urlparse(endpoint)
         if e.scheme == "":
@@ -83,7 +83,7 @@ class _QIPClient(object):
         self.endpoint = e
         self.username = username
         self.password = password
-        self.organsation = organsation
+        self.organisation = organisation
         self.session = requests.Session()
         self.session.headers.update({'accept': 'application/json'})
         self.session.headers.update({'Content-Type': 'application/json'})
@@ -107,7 +107,7 @@ class _QIPClient(object):
         # logger.debug(f"Data: {data}")
         resp = self.session.request(method, url, json=data, params=query)
         logger.debug(f"API Request to URL: {url}")
-        if action == "/api/v1/FIL/zone.json" and resp.status_code == 404:
+        if action == f"/api/v1/{self.organisation}/zone.json" and resp.status_code == 404:
             return resp.text
         if resp.status_code < 200 or resp.status_code > 299:
             raise errors.PluginError(f"HTTP Error during request {resp.status_code}")
@@ -141,11 +141,11 @@ class _QIPClient(object):
         self._login()
         record = self.get_existing_txt(record_name)
         if record is not None:
-            if record["data1"] == record_content:
-                logger.info(f"already there, id {record['owner']}")
+            if "rr" in record and record["rr"]["data"] == record_content:
+                logger.info(f"already there, id {record['rr']['name']}")
                 return
             else:
-                logger.info(f"update {record['owner']}")
+                logger.info(f"update {record_name}")
                 self._update_txt_record(record, record_content, record_ttl)
         else:
             logger.info("insert new txt record")
@@ -162,29 +162,49 @@ class _QIPClient(object):
         :raises certbot.errors.PluginError: if an error occurs communicating with the VitalQIP API
         """
         self._login()
+        logger.info(f"delete {record_name}")
         zone = self._find_managed_zone(domain)
-        query = {"infraFQDN": zone, "infraType": "ZONE", "owner": record_name }
-        resp = self._api_request("DELETE", "/api/v1/FIL/rr/singleDelete", query=query)
-
-    def _prepare_rr_data(self, old_record, record_content, record_ttl):
-        updated_record = old_record.copy()
-        updated_record["data1"] = record_content
-        updated_record["ttl"] = record_ttl
-        update_body = {'oldRRRec': old_record, 'updatedRRRec': updated_record}
-        return update_body
+        query = {"infraFQDN": zone, "infraType": "ZONE", "owner": record_name, "rrType": "TXT", "data1": record_content}
+        resp = self._api_request("DELETE", f"/api/v1/{self.organisation}/rr/singleDelete", query=query)
 
     def _insert_txt_record(self, record_name, record_content, record_ttl, domain):
         logger.debug(f"insert with data: {record_content}")
         zone_name = self._find_managed_zone(domain)
         payload = {"owner": record_name, "classType": "IN", "rrType": "TXT", "data1": record_content, "publishing": "ALWAYS", "ttl": record_ttl, "infraType": "ZONE", "infraFQDN": zone_name}
         self._login()
-        self._api_request("POST", "/api/v1/FIL/rr", data=payload)
+        self._api_request("POST", f"/api/v1/{self.organisation}/rr", data=payload)
 
     def _update_txt_record(self, old_record, record_content, record_ttl):
-        data = self._prepare_rr_data(old_record, record_content, record_ttl)
-        logger.debug("update with data: {data}")
+        logger.debug(f"update with data: {record_content}")
         self._login()
-        self._api_request("PUT", "/api/v1/FIL/rr", data)
+        # old record data is being returned with quotes which make the update fail. We need to strip them for update to work
+        old_data = old_record["rr"]["data"].lstrip('"').rstrip('"')
+        update_body = {
+            "oldRRRec": {
+                "owner": old_record["rr"]["name"],
+                "classType": "IN",
+                "rrType": old_record["rr"]["recordType"],
+                "data1": old_data,
+                "publishing": "ALWAYS",
+                "ttl": record_ttl,
+                "infraType": "ZONE",
+                "infraFQDN": old_record["name"],
+                "isDefaultRR": False
+            },
+            "updatedRRRec": {
+                "owner": old_record["rr"]["name"],
+                "classType": "IN",
+                "rrType": old_record["rr"]["recordType"],
+                "data1": record_content,
+                "publishing": "ALWAYS",
+                "ttl": record_ttl,
+                "infraType": "ZONE",
+                "infraFQDN": old_record["name"],
+                "isDefaultRR": False
+            }
+        }
+        logger.debug(f"update with data: {update_body}")
+        self._api_request("PUT", f"/api/v1/{self.organisation}/rr", data=update_body)
 
     def _find_managed_zone(self, domain):
         """
@@ -198,13 +218,14 @@ class _QIPClient(object):
         if len(domain.split('.')) == 1:
             raise errors.PluginError(f"No zone found")
         self._login()
-        zones = self._api_request("GET", "/api/v1/FIL/zone.json", query={"name": domain})
+        zones = self._api_request("GET", f"/api/v1/{self.organisation}/zone.json", query={"name": domain})
         if "DNS Zone not found" in zones:
             domain = '.'.join(domain.split('.')[1:])
             return self._find_managed_zone(domain)
         else:
             for zone in zones["list"]:
                 if zone["name"] == domain:
+                    logger.debug(f"found zone: {zone["name"]}")
                     return zone["name"]
 
     def get_existing_txt(self, record_name):
@@ -220,12 +241,14 @@ class _QIPClient(object):
         :rtype: `Object` or `None`
         """
         self._login()
-        query = {"name": record_name, "getDefaultRRs": "true"}
+        query = {"name": record_name, "searchType": "All", "subRange": "TXT"}
+        logger.debug(f"searching for : {query}")
         try:
-            records = self._api_request("GET", "/api/v1/FIL/rr.json", query=query)
+            records = self._api_request("GET", f"/api/v1/{self.organisation}/qip-search.json", query=query)
         except:
             return None
         for record in records['list']:
-            if record['rrType'] == 'TXT':
-                return record
+            if "rr" in record:
+                if record["rr"]['recordType'] == 'TXT' and record["rr"]["name"] == record_name:
+                    return record
         return None

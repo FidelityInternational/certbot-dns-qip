@@ -74,9 +74,6 @@ class AuthenticatorTest(
         ]
         self.assertEqual(expected, self.mock_client.mock_calls)
 
-
-
-
 @pytest.fixture()
 def adapter():
     return requests_mock.Adapter()
@@ -132,6 +129,26 @@ def test_del_txt_record(adapter, client):
     _register_response(adapter,"DELETE", f"/api/v1/{FAKE_ORG}/rr/singleDelete?infraFQDN={DOMAIN}&infraType=ZONE&owner={FAKE_RECORD}", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, status_code=204)
     client.del_txt_record(DOMAIN, FAKE_RECORD, FAKE_RECORD_CONTENT, FAKE_RECORD_TTL)
     assert(adapter.call_count) == 4
+
+def test_login_already_authenticated(client, adapter):
+    client.session.headers.update({'Authentication': f"Token {FAKE_TOKEN}"})
+    assert adapter.called == False
+
+@pytest.mark.parametrize("response_headers, expectation", [
+    ({"Authentication": FAKE_TOKEN}, does_not_raise()),
+    ({}, pytest.raises(errors.PluginError))
+], ids=[
+    "Happy 200 response with token in response headers",
+    "Not so happy 200 response without token in response headers"
+])
+def test_login_authentication(client, adapter, response_headers, expectation):
+    _register_response(adapter, "POST", "/api/login", response_headers=response_headers)
+    with expectation:
+        client._login()
+        print(client.session.headers)
+        assert adapter.called == True
+        assert adapter.request_history[0].body == json.dumps({"username": FAKE_USER, "password": FAKE_PW}).encode('utf-8')
+        assert client.session.headers["Authentication"] == f"Token {FAKE_TOKEN}"
 
 @pytest.mark.parametrize("method, path, query, request_data, response_body, request_headers, response_headers, response_json, status_code, expectation", [
     ("GET", "/foo", "baz=bar", None, None, {}, {"foo": "bar"}, None, 200, does_not_raise()),

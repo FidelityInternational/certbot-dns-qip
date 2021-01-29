@@ -102,9 +102,9 @@ class _QIPClient(object):
         logger.debug(f"session token is {token}")
         self.session.headers.update({'Authentication': f"Token {token}"})
 
-    def _api_request(self, method, action, data={}, query={}):
+    def _api_request(self, method, action, data=None, query={}):
         url = self._get_url(action)
-        # logger.debug(f"Data: {data}")
+        logger.debug(f"Data: {data}")
         resp = self.session.request(method, url, json=data, params=query)
         logger.debug(f"API Request to URL: {url}")
         if action == f"/api/v1/{self.organisation}/zone.json" and resp.status_code == 404:

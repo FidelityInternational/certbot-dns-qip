@@ -221,3 +221,34 @@ def test_update_txt_record(adapter, client):
     assert adapter.called == True
     assert json.loads(adapter.request_history[0].body)["updatedRRRec"]["data1"] == FAKE_RECORD_CONTENT
     assert json.loads(adapter.request_history[0].body)["updatedRRRec"]["ttl"] == FAKE_RECORD_TTL
+
+zone_record = {
+    "name": DOMAIN,
+    "defaultTtl": 3600,
+    "email": "hostmaster@foo.bar",
+    "expireTime": 604800,
+    "negativeCacheTtl": 600,
+    "refreshTime": 21600,
+    "retryTime": 3600
+}
+@pytest.mark.parametrize("qip_response, status_code, expectation", [
+    (zone_record, 200, does_not_raise()),
+    ({"error": f"DNS Zone not found: [{DOMAIN}]"}, 404, pytest.raises(errors.PluginError)),
+    ({"foo": "bar"}, 200, pytest.raises(errors.PluginError)),
+    ({"list": [{"foo": "bar"}]}, 200, pytest.raises(errors.PluginError))
+    ], ids=[
+        "200 response, zone found",
+        "404 response, no zone found with that name",
+        "200 response, bad QIP response without list key",
+        "200 response, bad QIP response without name key"
+    ]
+)
+def test_search_zone(adapter, client, qip_response, status_code, expectation):
+    search_zone_response = {
+        "list": [qip_response]
+    }
+    _register_response(adapter,"GET", f"/api/v1/{FAKE_ORG}/zone.json?name={DOMAIN}", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_zone_response, status_code=status_code)
+    client.session.headers.update({"Authentication": f"Token {FAKE_TOKEN}"})
+    with expectation:
+        zone_name = client._find_managed_zone(DOMAIN)
+        assert zone_name == DOMAIN

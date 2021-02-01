@@ -223,10 +223,16 @@ class _QIPClient(object):
             domain = '.'.join(domain.split('.')[1:])
             return self._find_managed_zone(domain)
         else:
-            for zone in zones["list"]:
-                if zone["name"] == domain:
-                    logger.debug(f"found zone: {zone['name']}")
-                    return zone["name"]
+            if "list" in zones:
+                for zone in zones["list"]:
+                    if "name" in zone:
+                        if zone["name"] == domain:
+                            logger.debug(f"found zone: {zone['name']}")
+                            return zone["name"]
+                    else:
+                        raise errors.PluginError("Unexpected QIP response")
+            else:
+                raise errors.PluginError("Unexpected QIP response")
 
     def get_existing_txt(self, record_name):
         """

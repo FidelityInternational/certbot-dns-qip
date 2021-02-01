@@ -124,10 +124,6 @@ class _QIPClient(object):
     def _get_url(self, action):
         return f"{self.endpoint.geturl()}{action}"
 
-    def _get_server_id(self, zone_id):
-        zone = self._api_request("dns_zone_get", {"primary_id": zone_id})
-        return zone["server_id"]
-
     def add_txt_record(self, domain, record_name, record_content, record_ttl):
         """
         Add a TXT record using the supplied information.

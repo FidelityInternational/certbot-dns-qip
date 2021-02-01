@@ -178,4 +178,46 @@ def test_api_request(adapter, client, method, path, query, request_data, respons
         if response_json is not None:
             assert resp == json.dumps(response_json)
 
+record = {
+            "name": DOMAIN,
+            "type": "DOMAIN",
+            "rr": {
+                "name": FAKE_RECORD,
+                "recordType": "TXT",
+                "data": FAKE_RECORD_CONTENT,
+            }
+        }
+@pytest.mark.parametrize("records, status_code, expected_response", [
+    ([record], 200, record),
+    ([{
+        "name": DOMAIN,
+        "type": "DOMAIN",
+        "rr": {
+            "name": FAKE_RECORD,
+            "recordType": "CNAME",
+            "data": FAKE_RECORD_CONTENT,
+        }
+    }, record], 200, record),
+    ({"error": f"Cannot find All where name = {FAKE_RECORD}"}, 404, None)
+], ids=[
+    "happy 200 response, returning a single record",
+    "happy 200 response, multiple records returned",
+    "unhappy 404 response, no records  matching record name"
+])
+def test_get_txt_record(adapter, client, records, status_code, expected_response):
+    client.session.headers.update({"Authentication": f"Token {FAKE_TOKEN}"})
+    search_txt_response = {
+        "list": records
+    }
 
+    _register_response(adapter, "GET", f"/api/v1/{FAKE_ORG}/qip-search.json?name={FAKE_RECORD}&searchType=All&subRange=TXT", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_txt_response, status_code=status_code)
+    rec = client.get_existing_txt(FAKE_RECORD)
+    assert rec == expected_response
+
+def test_update_txt_record(adapter, client):
+    _register_response(adapter, "PUT", f"/api/v1/{FAKE_ORG}/rr")
+    client.session.headers.update({"Authentication": f"Token {FAKE_TOKEN}"})
+    client._update_txt_record(record, FAKE_RECORD_CONTENT, FAKE_RECORD_TTL)
+    assert adapter.called == True
+    assert json.loads(adapter.request_history[0].body)["updatedRRRec"]["data1"] == FAKE_RECORD_CONTENT
+    assert json.loads(adapter.request_history[0].body)["updatedRRRec"]["ttl"] == FAKE_RECORD_TTL

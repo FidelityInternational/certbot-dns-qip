@@ -211,9 +211,9 @@ class _QIPClient(object):
         Find the managed zone for a given domain.
 
         :param str domain: The domain for which to find the managed zone.
-        :returns: The ID of the managed zone, if found.
+        :returns: The name of the managed zone, if found.
         :rtype: str
-        :raises certbot.errors.PluginError: if the managed zone cannot be found.
+        :raises certbot.errors.PluginError: if the managed zone cannot be found or unexpected response is received.
         """
         if len(domain.split('.')) == 1:
             raise errors.PluginError(f"No zone found")

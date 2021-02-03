@@ -1,7 +1,5 @@
 """Tests for certbot_dns_qip.dns_qip."""
 
-from typing import Deque
-import unittest
 import pytest
 from contextlib import contextmanager
 
@@ -24,6 +22,7 @@ FAKE_TOKEN = "fake-token"
 FAKE_RECORD = "foo"
 FAKE_RECORD_CONTENT = "bar"
 FAKE_RECORD_TTL = 42
+
 
 class AuthenticatorTest(
     test_util.TempDirTestCase, dns_test_common.BaseAuthenticatorTest
@@ -75,9 +74,11 @@ class AuthenticatorTest(
         ]
         self.assertEqual(expected, self.mock_client.mock_calls)
 
+
 @pytest.fixture()
 def adapter():
     return requests_mock.Adapter()
+
 
 @pytest.fixture()
 def client(adapter):
@@ -85,13 +86,15 @@ def client(adapter):
     client.session.mount("http://", adapter)
     return client
 
+
 @contextmanager
 def does_not_raise():
     yield
 
+
 def record(record_type):
-    if record_type == None:
-       return None
+    if record_type is None:
+        return None
     return {
             "name": DOMAIN,
             "type": "DOMAIN",
@@ -102,7 +105,10 @@ def record(record_type):
             }
         }
 
-def _register_response(adapter, method, action, response=None, additional_matcher=None, request_headers={}, response_headers={}, **kwargs):
+
+def _register_response(
+    adapter, method, action, response=None, additional_matcher=None, request_headers={}, response_headers={}, **kwargs
+):
     adapter.register_uri(
         method,
         f"{FAKE_ENDPOINT}{action}",
@@ -113,10 +119,17 @@ def _register_response(adapter, method, action, response=None, additional_matche
         **kwargs
     )
 
+
 @pytest.mark.parametrize("record_type, update_record_data, call_count, calls, search_status_code", [
-    ("TXT", None, 2, [f"/api/login", f"/api/v1/{FAKE_ORG}/qip-search.json"], 200),
-    ("TXT", "foobarbaz", 3, [f"/api/login", f"/api/v1/{FAKE_ORG}/qip-search.json", f"/api/v1/{FAKE_ORG}/rr"], 200),
-    (None, None, 4, [f"/api/login", f"/api/v1/{FAKE_ORG}/qip-search.json", f"/api/v1/{FAKE_ORG}/zone.json", f"/api/v1/{FAKE_ORG}/rr"], 500)
+    ("TXT", None, 2, ["/api/login", f"/api/v1/{FAKE_ORG}/qip-search.json"], 200),
+    ("TXT", "foobarbaz", 3, ["/api/login", f"/api/v1/{FAKE_ORG}/qip-search.json", f"/api/v1/{FAKE_ORG}/rr"], 200),
+    (
+        None,
+        None,
+        4,
+        ["/api/login", f"/api/v1/{FAKE_ORG}/qip-search.json", f"/api/v1/{FAKE_ORG}/zone.json", f"/api/v1/{FAKE_ORG}/rr"],
+        500
+    )
 ], ids=[
     "Record already exists, do nothing",
     "Record exists but with incorrect data, updating existing txt record with correct data",
@@ -133,14 +146,26 @@ def test_add_txt_record(adapter, client, record_type, update_record_data, call_c
         "list": [{"name": DOMAIN}]
     }
     _register_response(adapter, "POST", "/api/login", response_headers={"Authentication": FAKE_TOKEN})
-    _register_response(adapter, "GET", f"/api/v1/{FAKE_ORG}/qip-search.json?name={FAKE_RECORD}&searchType=All&subRange=TXT", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_response, status_code=search_status_code)
+    _register_response(
+        adapter,
+        "GET",
+        f"/api/v1/{FAKE_ORG}/qip-search.json?name={FAKE_RECORD}&searchType=All&subRange=TXT",
+        request_headers={"Authentication": f'Token {FAKE_TOKEN}'},
+        json=search_response, status_code=search_status_code
+        )
     _register_response(adapter, "PUT", f"/api/v1/{FAKE_ORG}/rr", request_headers={"Authentication": f'Token {FAKE_TOKEN}'})
-    _register_response(adapter,"GET", f"/api/v1/{FAKE_ORG}/zone.json?name={DOMAIN}", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_zone_response)
+    _register_response(
+        adapter,
+        "GET", f"/api/v1/{FAKE_ORG}/zone.json?name={DOMAIN}",
+        request_headers={"Authentication": f'Token {FAKE_TOKEN}'},
+        json=search_zone_response
+        )
     _register_response(adapter, "POST", f"/api/v1/{FAKE_ORG}/rr", request_headers={"Authentication": f'Token {FAKE_TOKEN}'})
     client.add_txt_record(DOMAIN, FAKE_RECORD, FAKE_RECORD_CONTENT, FAKE_RECORD_TTL)
     for i, call in enumerate(calls):
         assert adapter.request_history[i].path == call
     assert adapter.call_count == call_count
+
 
 def test_del_txt_record(adapter, client):
     _register_response(adapter, "POST", "/api/login", response_headers={"Authentication": FAKE_TOKEN})
@@ -155,7 +180,14 @@ def test_del_txt_record(adapter, client):
             }
         }]
     }
-    _register_response(adapter, "GET", f"/api/v1/{FAKE_ORG}/qip-search.json?name={FAKE_RECORD}&searchType=All&subRange=TXT", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_txt_response)
+    _register_response(
+        adapter,
+        "GET",
+        f"/api/v1/{FAKE_ORG}/qip-search.json?name={FAKE_RECORD}&searchType=All&subRange=TXT",
+        request_headers={"Authentication": f'Token {FAKE_TOKEN}'},
+        json=search_txt_response
+        )
+
     search_zone_response = {
         "list": [{
             "name": DOMAIN,
@@ -167,14 +199,28 @@ def test_del_txt_record(adapter, client):
             "retryTime": 3600
         }]
     }
-    _register_response(adapter,"GET", f"/api/v1/{FAKE_ORG}/zone.json?name={DOMAIN}", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_zone_response)
-    _register_response(adapter,"DELETE", f"/api/v1/{FAKE_ORG}/rr/singleDelete?infraFQDN={DOMAIN}&infraType=ZONE&owner={FAKE_RECORD}", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, status_code=204)
+    _register_response(
+        adapter,
+        "GET",
+        f"/api/v1/{FAKE_ORG}/zone.json?name={DOMAIN}",
+        request_headers={"Authentication": f'Token {FAKE_TOKEN}'},
+        json=search_zone_response
+        )
+    _register_response(
+        adapter,
+        "DELETE",
+        f"/api/v1/{FAKE_ORG}/rr/singleDelete?infraFQDN={DOMAIN}&infraType=ZONE&owner={FAKE_RECORD}",
+        request_headers={"Authentication": f'Token {FAKE_TOKEN}'},
+        status_code=204
+        )
     client.del_txt_record(DOMAIN, FAKE_RECORD, FAKE_RECORD_CONTENT, FAKE_RECORD_TTL)
     assert(adapter.call_count) == 4
 
+
 def test_login_already_authenticated(client, adapter):
     client.session.headers.update({'Authentication': f"Token {FAKE_TOKEN}"})
-    assert adapter.called == False
+    assert adapter.called is False
+
 
 @pytest.mark.parametrize("response_headers, expectation", [
     ({"Authentication": FAKE_TOKEN}, does_not_raise()),
@@ -187,24 +233,50 @@ def test_login_authentication(client, adapter, response_headers, expectation):
     _register_response(adapter, "POST", "/api/login", response_headers=response_headers)
     with expectation:
         client._login()
-        assert adapter.called == True
+        assert adapter.called is True
         assert adapter.request_history[0].body == json.dumps({"username": FAKE_USER, "password": FAKE_PW}).encode('utf-8')
         assert client.session.headers["Authentication"] == f"Token {FAKE_TOKEN}"
 
-@pytest.mark.parametrize("method, path, query, request_data, response_body, request_headers, response_headers, response_json, status_code, expectation", [
-    ("GET", "/foo", "baz=bar", None, None, {}, {"foo": "bar"}, None, 200, does_not_raise()),
-    ("POST", "/login", "", None, None, {}, {}, None, 200, does_not_raise()),
-    ("GET", "/foo/bar", "", None, None, {}, {}, None, 500, pytest.raises(errors.PluginError)),
-    ("GET", "/foo/bar", "", None, "Non JSON response", {}, {}, None, 200, pytest.raises(errors.PluginError))
-], ids=[
-    "Happy 200 response for GET",
-    "Happy 200 response for POST",
-    "UnHappy 500 response for POST - raises an exception",
-    "Sort of happy 200 response for GET with non JSON body - raises an exception as it can't unmarshal response"
-])
-def test_api_request(adapter, client, method, path, query, request_data, response_body, request_headers, response_headers, response_json, status_code, expectation):
-    _register_response(adapter, method, f"{path}?{query}", response=response_body, request_headers=request_headers, response_headers=response_headers, json=response_json, status_code=status_code)
-    with expectation as e:
+
+@pytest.mark.parametrize(
+    "method,path,query,request_data,response_body,request_headers,response_headers,response_json,status_code,expectation",
+    [
+        ("GET", "/foo", "baz=bar", None, None, {}, {"foo": "bar"}, None, 200, does_not_raise()),
+        ("POST", "/login", "", None, None, {}, {}, None, 200, does_not_raise()),
+        ("GET", "/foo/bar", "", None, None, {}, {}, None, 500, pytest.raises(errors.PluginError)),
+        ("GET", "/foo/bar", "", None, "Non JSON response", {}, {}, None, 200, pytest.raises(errors.PluginError))
+    ],
+    ids=[
+        "Happy 200 response for GET",
+        "Happy 200 response for POST",
+        "UnHappy 500 response for POST - raises an exception",
+        "Sort of happy 200 response for GET with non JSON body - raises an exception as it can't unmarshal response"
+    ])
+def test_api_request(
+        adapter,
+        client,
+        method,
+        path,
+        query,
+        request_data,
+        response_body,
+        request_headers,
+        response_headers,
+        response_json,
+        status_code,
+        expectation
+):
+    _register_response(
+        adapter,
+        method,
+        f"{path}?{query}",
+        response=response_body,
+        request_headers=request_headers,
+        response_headers=response_headers,
+        json=response_json,
+        status_code=status_code
+        )
+    with expectation:
         resp = client._api_request(method, path, data=request_data, query=query)
         assert adapter.request_history[0].method == method
         assert adapter.request_history[0].path == path
@@ -218,6 +290,7 @@ def test_api_request(adapter, client, method, path, query, request_data, respons
             assert resp == response_body
         if response_json is not None:
             assert resp == json.dumps(response_json)
+
 
 @pytest.mark.parametrize("record_types, status_code, expected_response", [
     (["TXT"], 200, "TXT"),
@@ -236,17 +309,26 @@ def test_get_existing_txt(adapter, client, record_types, status_code, expected_r
     for r_type in record_types:
         search_txt_response["list"].append(record(r_type))
 
-    _register_response(adapter, "GET", f"/api/v1/{FAKE_ORG}/qip-search.json?name={FAKE_RECORD}&searchType=All&subRange=TXT", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_txt_response, status_code=status_code)
+    _register_response(
+        adapter,
+        "GET",
+        f"/api/v1/{FAKE_ORG}/qip-search.json?name={FAKE_RECORD}&searchType=All&subRange=TXT",
+        request_headers={"Authentication": f'Token {FAKE_TOKEN}'},
+        json=search_txt_response,
+        status_code=status_code
+    )
     rec = client.get_existing_txt(FAKE_RECORD)
     assert rec == record(expected_response)
+
 
 def test_update_txt_record(adapter, client):
     _register_response(adapter, "PUT", f"/api/v1/{FAKE_ORG}/rr")
     client.session.headers.update({"Authentication": f"Token {FAKE_TOKEN}"})
     client._update_txt_record(record("TXT"), FAKE_RECORD_CONTENT, FAKE_RECORD_TTL)
-    assert adapter.called == True
+    assert adapter.called is True
     assert json.loads(adapter.request_history[0].body)["updatedRRRec"]["data1"] == FAKE_RECORD_CONTENT
     assert json.loads(adapter.request_history[0].body)["updatedRRRec"]["ttl"] == FAKE_RECORD_TTL
+
 
 @pytest.mark.parametrize("qip_response, status_code, expectation", [
     ({"name": DOMAIN}, 200, does_not_raise()),
@@ -264,17 +346,31 @@ def test_find_managed_zone(adapter, client, qip_response, status_code, expectati
     search_zone_response = {
         "list": [qip_response]
     }
-    _register_response(adapter,"GET", f"/api/v1/{FAKE_ORG}/zone.json?name={DOMAIN}", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_zone_response, status_code=status_code)
+    _register_response(
+        adapter,
+        "GET",
+        f"/api/v1/{FAKE_ORG}/zone.json?name={DOMAIN}",
+        request_headers={"Authentication": f'Token {FAKE_TOKEN}'},
+        json=search_zone_response,
+        status_code=status_code
+    )
     client.session.headers.update({"Authentication": f"Token {FAKE_TOKEN}"})
     with expectation:
         zone_name = client._find_managed_zone(DOMAIN)
         assert zone_name == DOMAIN
 
+
 def test_insert_txt_record(adapter, client):
     search_zone_response = {
         "list": [{"name": DOMAIN}]
     }
-    _register_response(adapter,"GET", f"/api/v1/{FAKE_ORG}/zone.json?name={DOMAIN}", request_headers={"Authentication": f'Token {FAKE_TOKEN}'}, json=search_zone_response)
+    _register_response(
+        adapter,
+        "GET",
+        f"/api/v1/{FAKE_ORG}/zone.json?name={DOMAIN}",
+        request_headers={"Authentication": f'Token {FAKE_TOKEN}'},
+        json=search_zone_response
+    )
     _register_response(adapter, "POST", f"/api/v1/{FAKE_ORG}/rr", request_headers={"Authentication": f'Token {FAKE_TOKEN}'})
     client.session.headers.update({"Authentication": f"Token {FAKE_TOKEN}"})
     client._insert_txt_record(FAKE_RECORD, FAKE_RECORD_CONTENT, FAKE_RECORD_TTL, DOMAIN)

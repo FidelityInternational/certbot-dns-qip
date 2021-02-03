@@ -1,8 +1,6 @@
 """DNS Authenticator for VitalQIP."""
 import json
 import logging
-import time
-import sys
 
 import requests
 import zope.interface
@@ -10,9 +8,10 @@ import zope.interface
 from certbot import errors
 from certbot import interfaces
 from certbot.plugins import dns_common
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
 
 @zope.interface.implementer(interfaces.IAuthenticator)
 @zope.interface.provider(interfaces.IPluginFactory)
@@ -69,6 +68,7 @@ class Authenticator(dns_common.DNSAuthenticator):
             self.credentials.conf("password"),
             self.credentials.conf("organisation"),
         )
+
 
 class _QIPClient(object):
     """
@@ -165,12 +165,21 @@ class _QIPClient(object):
             logger.info(f"delete {record_name}")
             zone = self._find_managed_zone(domain)
             query = {"infraFQDN": zone, "infraType": "ZONE", "owner": record_name, "rrType": "TXT", "data1": record_content}
-            resp = self._api_request("DELETE", f"/api/v1/{self.organisation}/rr/singleDelete", query=query)
+            self._api_request("DELETE", f"/api/v1/{self.organisation}/rr/singleDelete", query=query)
 
     def _insert_txt_record(self, record_name, record_content, record_ttl, domain):
         logger.debug(f"insert with data: {record_content}")
         zone_name = self._find_managed_zone(domain)
-        payload = {"owner": record_name, "classType": "IN", "rrType": "TXT", "data1": record_content, "publishing": "ALWAYS", "ttl": record_ttl, "infraType": "ZONE", "infraFQDN": zone_name}
+        payload = {
+            "owner": record_name,
+            "classType": "IN",
+            "rrType": "TXT",
+            "data1": record_content,
+            "publishing": "ALWAYS",
+            "ttl": record_ttl,
+            "infraType": "ZONE",
+            "infraFQDN": zone_name
+            }
         self._login()
         self._api_request("POST", f"/api/v1/{self.organisation}/rr", data=payload)
 
@@ -216,7 +225,7 @@ class _QIPClient(object):
         :raises certbot.errors.PluginError: if the managed zone cannot be found or unexpected response is received.
         """
         if len(domain.split('.')) == 1:
-            raise errors.PluginError(f"No zone found")
+            raise errors.PluginError("No zone found")
         self._login()
         zones = self._api_request("GET", f"/api/v1/{self.organisation}/zone.json", query={"name": domain})
         if "DNS Zone not found" in zones:
@@ -251,7 +260,7 @@ class _QIPClient(object):
         logger.debug(f"searching for : {query}")
         try:
             records = self._api_request("GET", f"/api/v1/{self.organisation}/qip-search.json", query=query)
-        except:
+        except(errors.PluginError):
             return None
         for record in records['list']:
             if "rr" in record:

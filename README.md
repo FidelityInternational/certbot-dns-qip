@@ -1,5 +1,7 @@
 # Certbot QIP DNS Plugin
 
+>This plugin was heavily inspired by the work done on [certbot-dns-ispconfig](https://github.com/m42e/certbot-dns-ispconfig) plugin, thanks a lot folks!
+
 VitalQIP DNS Authenticator plugin for Certbot
 
 This plugin automates the process of completing a dns-01 challenge by creating, and subsequently removing, TXT records using the VitalQIP Remote API.

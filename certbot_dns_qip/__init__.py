@@ -1,20 +1,20 @@
 """
-The `~certbot_dns_qip.dns_qip` plugin automates the process of
-completing a ``dns-01`` challenge (`~acme.challenges.DNS01`) by creating, and
-subsequently removing, TXT records using the QIP REST API.
+
+This plugin automates the process of completing a dns-01 challenge by creating,
+and subsequently removing, TXT records using the VitalQIP Rest API.
 
 
 Named Arguments
 ---------------
 
-========================================  =====================================
-``--dns-qip-credentials``                 QIP Remote API credentials_
-                                          INI file. (Required)
-``--dns-qip-propagation-seconds``         The number of seconds to wait for DNS
-                                          to propagate before asking the ACME
-                                          server to verify the DNS record.
-                                          (Default: 120)
-========================================  =====================================
+===================================    ======================================
+``--dns-qip-credentials``              QIP Remote API credentials_
+                                       INI file. (Required)
+``--dns-qip-propagation-seconds``      The number of seconds to wait for DNS
+                                       to propagate before asking the ACME
+                                       server to verify the DNS record.
+                                       (Default: 120)
+===================================    ======================================
 
 
 Credentials
@@ -24,13 +24,14 @@ Use of this plugin requires a configuration file containing VitalQIP Remote API
 credentials.
 
 .. code-block:: ini
-   :name: credentials.ini
+   :name: creds.ini
    :caption: Example credentials file:
 
    # VitalQIP API credentials used by Certbot
-   dns_qip_username = myqipremoteuser
-   dns_qip_password = mysecretpassword
-   dns_qip_endpoint = https://localhost:8080
+   certbot_dns_qip:dns_qip_username = myremoteuser
+   certbot_dns_qip:dns_qip_password = verysecureremoteuserpassword
+   certbot_dns_qip:dns_qip_endpoint = https://localhost:8443/
+   certbot_dns_qip:dns_qip_organisation = exampleorg
 
 The path to this file can be provided interactively or using the
 ``--dns-qip-credentials`` command-line argument. Certbot records the path
@@ -58,8 +59,8 @@ Examples
    :caption: To acquire a certificate for ``example.com``
 
    certbot certonly \\
-     --dns-qip \\
-     --dns-qip-credentials ~/.secrets/certbot/qip.ini \\
+     --authenticator certbot-dns-qip:dns-qip \\
+     --dns-qip-credentials ~/.secrets/certbot/creds.ini \\
      -d example.com
 
 .. code-block:: bash
@@ -67,7 +68,7 @@ Examples
              ``www.example.com``
 
    certbot certonly \\
-     --dns-qip \\
+     --authenticator certbot-dns-qip:dns-qip \\
      --dns-qip-credentials ~/.secrets/certbot/qip.ini \\
      -d example.com \\
      -d www.example.com
@@ -77,8 +78,8 @@ Examples
              for DNS propagation
 
    certbot certonly \\
-     --dns-qip \\
-     --dns-qip-credentials ~/.secrets/certbot/qip.ini \\
+     --authenticator certbot-dns-qip:dns-qip \\
+     --dns-qip-credentials ~/.secrets/certbot/creds.ini \\
      --dns-qip-propagation-seconds 240 \\
      -d example.com
 

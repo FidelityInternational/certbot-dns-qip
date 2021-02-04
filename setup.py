@@ -25,7 +25,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/FidelityInternational/certbot-dns-qip",
     author="Fidelity International",
-    author_email="noreply@fli.com",
+    author_email="IM00109@fil.com",
     license="BSD 2-Clause License",
     python_requires=">=3.6",
     classifiers=[
